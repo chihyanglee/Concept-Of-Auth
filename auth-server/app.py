@@ -61,7 +61,60 @@ def create_tables():
                 client_name='Demo Application'
             )
             db.session.add(demo_client)
-        
+
+        # ──────────────────────────────────────────────────────────────
+        # Task Client App (task-client)
+        # ──────────────────────────────────────────────────────────────
+        # This is a "confidential client" — a server-side web application
+        # that can securely store its client_secret. It uses the
+        # Authorization Code flow to authenticate users via the auth server
+        # and obtain access tokens on their behalf.
+        #
+        # - redirect_uris: where the auth server sends the user back after
+        #   they approve the login. Must match exactly what the client sends
+        #   in the authorization request (prevents open-redirect attacks).
+        # - scopes: the permissions this client is allowed to request.
+        #   'openid profile email' are standard OIDC scopes for identity,
+        #   'read write' are resource-level scopes for the Task API.
+        # ──────────────────────────────────────────────────────────────
+        if not Client.query.filter_by(client_id='task-client').first():
+            task_client = Client(
+                client_id='task-client',
+                client_secret='task-client-secret',
+                redirect_uris='http://localhost:5001/callback',
+                scopes='read write openid profile email',
+                client_name='Task Manager App'
+            )
+            db.session.add(task_client)
+
+        # ──────────────────────────────────────────────────────────────
+        # Task Resource Service (task-service)
+        # ──────────────────────────────────────────────────────────────
+        # This is a machine-to-machine (M2M) client that represents the
+        # Task Resource API itself. It uses the Client Credentials grant
+        # — no user is involved, so there is no redirect_uri.
+        #
+        # Why does an API need its own client registration?
+        # The resource server may need to call the auth server's
+        # introspection or JWKS endpoints to validate tokens, or it may
+        # need its own access token to call other services. Registering
+        # it as a client gives it an identity the auth server recognises.
+        #
+        # - redirect_uris is empty because Client Credentials never
+        #   redirects a browser — it is a direct back-channel exchange.
+        # - scopes are limited to 'read write' (no OIDC scopes needed
+        #   because there is no end-user identity involved).
+        # ──────────────────────────────────────────────────────────────
+        if not Client.query.filter_by(client_id='task-service').first():
+            task_service = Client(
+                client_id='task-service',
+                client_secret='task-service-secret',
+                redirect_uris='',
+                scopes='read write',
+                client_name='Task Resource Service'
+            )
+            db.session.add(task_service)
+
         db.session.commit()
         app._tables_created = True
 
