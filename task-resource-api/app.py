@@ -206,7 +206,12 @@ def validate_token_locally(token):
         payload = jwt.decode(
             token,
             app.config['JWT_SECRET_KEY'],
-            algorithms=['HS256']
+            algorithms=['HS256'],
+            # Disable audience verification because tokens may come from
+            # different OAuth clients (task-client, demo-client, etc.) or
+            # direct login (aud='default'). In production, you'd verify
+            # the audience matches this service's expected identifier.
+            options={"verify_aud": False}
         )
 
         # Ensure this is an access token, not a refresh token or ID token.

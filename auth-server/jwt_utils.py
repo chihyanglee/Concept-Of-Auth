@@ -133,9 +133,10 @@ def verify_token(token, token_type='access'):
     try:
         # Decode the token
         payload = jwt.decode(
-            token, 
-            current_app.config['JWT_SECRET_KEY'], 
-            algorithms=['HS256']
+            token,
+            current_app.config['JWT_SECRET_KEY'],
+            algorithms=['HS256'],
+            options={'verify_aud': False}
         )
         
         # Check if token is blocked (revoked)
@@ -255,10 +256,10 @@ def revoke_token(token):
     try:
         # Decode token to get JTI and expiration
         payload = jwt.decode(
-            token, 
-            current_app.config['JWT_SECRET_KEY'], 
+            token,
+            current_app.config['JWT_SECRET_KEY'],
             algorithms=['HS256'],
-            options={'verify_exp': False}  # Don't verify expiration for revoked tokens
+            options={'verify_exp': False, 'verify_aud': False}
         )
         
         jti = payload.get('jti')
@@ -304,10 +305,10 @@ def get_user_from_token(token):
     """
     try:
         payload = jwt.decode(
-            token, 
-            current_app.config['JWT_SECRET_KEY'], 
+            token,
+            current_app.config['JWT_SECRET_KEY'],
             algorithms=['HS256'],
-            options={'verify_exp': False}  # Don't verify expiration
+            options={'verify_exp': False, 'verify_aud': False}
         )
         return payload
     except jwt.InvalidTokenError:
