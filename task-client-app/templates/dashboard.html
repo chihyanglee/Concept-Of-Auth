@@ -1,0 +1,181 @@
+<!--
+  dashboard.html — Authenticated User Dashboard
+  ==============================================
+
+  This page is only accessible to authenticated users (the @login_required
+  decorator checks for a valid access_token in the session).
+
+  It demonstrates several OAuth 2.0 and OIDC concepts:
+    1. Using an ACCESS TOKEN to call a protected Resource API (Task API)
+    2. Displaying user identity from the OIDC ID TOKEN
+    3. Calling the OIDC UserInfo endpoint with the access token
+    4. Showing decoded token contents for educational purposes
+-->
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     CREATE TASK FORM
+     ═══════════════════════════════════════════════════════════════════════
+     When this form is submitted, the client app (this Flask server) calls
+     the Task Resource API at POST http://localhost:5002/tasks with the
+     user's access token as a Bearer token in the Authorization header.
+
+     The Resource API validates the JWT, checks for the 'write' scope,
+     and creates the task for the user identified by the token's 'sub' claim.
+-->
+<div class="card">
+    <h2>Create a Task</h2>
+    <form method="POST" action="/tasks" style="display: flex; gap: 0.5rem;">
+        <input type="text" name="title" placeholder="What needs to be done?"
+               required style="flex: 1; padding: 0.6rem 0.8rem; border: 1px solid #ccc;
+               border-radius: 6px; font-size: 0.95rem;">
+        <button type="submit" class="btn btn-success">Add Task</button>
+    </form>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     TASK LIST
+     ═══════════════════════════════════════════════════════════════════════
+     These tasks are fetched from the Resource API (GET http://localhost:5002/tasks)
+     using the access token. The Resource API only returns tasks belonging to
+     the authenticated user (filtered by the JWT's 'sub' claim).
+
+     Each "Done" and "Delete" button triggers a POST to this client app,
+     which then calls the Resource API with the appropriate method:
+       - Done:   PUT  /tasks/<id> with { "completed": true }
+       - Delete: DELETE /tasks/<id>
+-->
+<div class="card">
+    <h2>Your Tasks</h2>
+
+    {% if tasks %}
+    <table>
+        <thead>
+            <tr>
+                <th>Task</th>
+                <th>Status</th>
+                <th style="width: 150px;">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for task in tasks %}
+            <tr>
+                <td class="{{ 'task-done' if task.get('completed') }}">
+                    {{ task.get('title', 'Untitled') }}
+                </td>
+                <td>
+                    {% if task.get('completed') %}
+                        <span style="color: #81c784;">Done</span>
+                    {% else %}
+                        <span style="color: #ffb74d;">Pending</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if not task.get('completed') %}
+                    <form method="POST" action="/tasks/{{ task['id'] }}/complete" style="display: inline;">
+                        <button type="submit" class="btn btn-success btn-sm">Done</button>
+                    </form>
+                    {% endif %}
+                    <form method="POST" action="/tasks/{{ task['id'] }}/delete" style="display: inline;">
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #90a4ae; text-align: center; padding: 2rem 0;">
+        No tasks yet. Create one above!
+    </p>
+    {% endif %}
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════
+     OAUTH DEBUG INFO
+     ═══════════════════════════════════════════════════════════════════════
+     This section is for educational purposes. It shows the decoded contents
+     of the tokens and the UserInfo response so you can see exactly what
+     data flows between the three services (auth server, client app, resource API).
+
+     IN PRODUCTION, you would NEVER display tokens or their contents to end users.
+     This is purely for learning how OAuth 2.0 and OIDC work.
+-->
+<div class="debug-section">
+    <h3>OAuth 2.0 Debug Info</h3>
+    <p class="comment">
+        This section shows decoded token contents for educational purposes.
+        Never expose tokens in a production application!
+    </p>
+
+    <!-- ── Access Token Claims ──────────────────────────────────────── -->
+    <!--
+      The ACCESS TOKEN is what the client sends to the Resource API.
+      Key claims:
+        - 'sub': The user's ID (subject). The Resource API uses this to
+                 filter tasks — each user only sees their own tasks.
+        - 'scopes': The permissions granted (e.g., ["read", "write"]).
+                    The Resource API checks these before allowing operations.
+        - 'exp': Expiration time. Access tokens are short-lived (15 min).
+        - 'type': "access" — distinguishes from refresh/ID tokens.
+        - 'client_id': Which OAuth client requested this token.
+    -->
+    <h3 style="font-size: 0.95rem; margin-top: 1rem;">Access Token Claims</h3>
+    <p class="comment">
+        Sent as "Authorization: Bearer &lt;token&gt;" to the Resource API.
+        Contains scopes (permissions) and user identity.
+    </p>
+    <pre>{{ access_token_claims }}</pre>
+
+    <!-- ── ID Token Claims (OIDC) ──────────────────────────────────── -->
+    <!--
+      The ID TOKEN is an OpenID Connect concept. It's a JWT that contains
+      the user's identity claims. Unlike the access token, the ID token
+      is meant ONLY for the client app — never sent to resource servers.
+
+      Key claims:
+        - 'sub': User ID (same as access token).
+        - 'preferred_username': The user's display name.
+        - 'aud': The client_id this token was issued for.
+        - 'iss': The issuer (auth server URL).
+        - 'iat': When the token was issued.
+
+      The ID Token proves that the user authenticated with the auth server.
+      It's like a digital ID card that the auth server hands to the client.
+    -->
+    <h3 style="font-size: 0.95rem; margin-top: 1rem;">ID Token Claims (OpenID Connect)</h3>
+    <p class="comment">
+        Contains user identity. Used by the client app only — never sent to APIs.
+        This is how the client knows WHO the user is.
+    </p>
+    <pre>{{ id_token_claims }}</pre>
+
+    <!-- ── UserInfo Endpoint Response ───────────────────────────────── -->
+    <!--
+      The USERINFO ENDPOINT is another OIDC feature. It's an API on the
+      auth server (GET /oauth/userinfo) that returns user claims.
+
+      Why have both an ID Token AND a UserInfo endpoint?
+        - ID Token: Issued once during login. Contains a snapshot of user
+                    claims at the time of authentication.
+        - UserInfo: Can be called anytime with an access token. Returns
+                    CURRENT user claims (which may have changed since login).
+
+      The UserInfo endpoint is useful for:
+        - Getting claims that were too large to include in the ID Token.
+        - Refreshing user info without re-authenticating.
+        - Verifying that the user's account is still active.
+    -->
+    <h3 style="font-size: 0.95rem; margin-top: 1rem;">UserInfo Endpoint Response</h3>
+    <p class="comment">
+        Fetched from GET /oauth/userinfo on the auth server using the access token.
+        Returns current user claims (may differ from ID token if user info changed).
+    </p>
+    <pre>{{ userinfo_data }}</pre>
+</div>
+
+{% endblock %}

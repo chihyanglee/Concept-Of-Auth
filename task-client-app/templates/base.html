@@ -1,0 +1,308 @@
+<!--
+  base.html — Base Template for the Task Client App
+  ==================================================
+
+  This is the shared layout that all pages inherit from using Jinja2's
+  template inheritance ({% extends "base.html" %}).
+
+  KEY CONCEPT — Where does the username come from?
+  ------------------------------------------------
+  The username displayed in the nav bar comes from the OIDC ID Token, NOT
+  from a session cookie or a database lookup. Here's the flow:
+
+    1. User logs in via OAuth 2.0 Authorization Code flow.
+    2. The auth server returns three tokens:
+       - Access Token:  used to call protected APIs (sent as Bearer token).
+       - Refresh Token: used to get new access tokens when they expire.
+       - ID Token:      an OIDC (OpenID Connect) token containing the user's
+                        identity claims (username, email, etc.).
+    3. We decode the ID Token (a JWT) to extract the 'preferred_username'
+       or 'username' claim, and display it here.
+
+  The ID Token is ONLY for the client app — it should NEVER be sent to
+  resource servers. Access Tokens are what you send to APIs.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Task Manager{% endblock %} — OAuth 2.0 Demo</title>
+    <style>
+        /* ── Reset & Base ─────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                         "Helvetica Neue", Arial, sans-serif;
+            background: #f0f2f5;
+            color: #1a1a2e;
+            line-height: 1.6;
+        }
+
+        /* ── Navigation Bar ───────────────────────────────────────────── */
+        nav {
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 0.8rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        }
+
+        nav .brand {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #4fc3f7;
+            text-decoration: none;
+        }
+
+        nav .brand span {
+            color: #81c784;
+            font-size: 0.75rem;
+            margin-left: 0.5rem;
+            padding: 2px 8px;
+            border: 1px solid #81c784;
+            border-radius: 4px;
+            vertical-align: middle;
+        }
+
+        nav .user-info {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        nav .user-info .username {
+            color: #e0e0e0;
+            font-size: 0.9rem;
+        }
+
+        nav .user-info .role-badge {
+            background: #4fc3f7;
+            color: #1a1a2e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* ── Buttons ──────────────────────────────────────────────────── */
+        .btn {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .btn:hover { transform: translateY(-1px); }
+        .btn:active { transform: translateY(0); }
+
+        .btn-primary { background: #4fc3f7; color: #1a1a2e; font-weight: 600; }
+        .btn-primary:hover { background: #29b6f6; }
+
+        .btn-success { background: #81c784; color: #1a1a2e; font-weight: 600; }
+        .btn-success:hover { background: #66bb6a; }
+
+        .btn-danger { background: #e57373; color: white; font-weight: 600; }
+        .btn-danger:hover { background: #ef5350; }
+
+        .btn-sm { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
+
+        .btn-logout {
+            background: transparent;
+            color: #e57373;
+            border: 1px solid #e57373;
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .btn-logout:hover { background: #e57373; color: white; }
+
+        /* ── Main Content ─────────────────────────────────────────────── */
+        .container {
+            max-width: 900px;
+            margin: 2rem auto;
+            padding: 0 1.5rem;
+        }
+
+        /* ── Flash Messages ───────────────────────────────────────────── */
+        .flash-messages {
+            margin-bottom: 1.5rem;
+        }
+
+        .flash {
+            padding: 0.8rem 1.2rem;
+            border-radius: 6px;
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+        }
+
+        .flash-error   { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+        .flash-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+        .flash-info    { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+
+        /* ── Cards ────────────────────────────────────────────────────── */
+        .card {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card h2 {
+            margin-bottom: 1rem;
+            color: #1a1a2e;
+            font-size: 1.3rem;
+        }
+
+        .card h3 {
+            margin-bottom: 0.8rem;
+            color: #37474f;
+            font-size: 1.1rem;
+        }
+
+        /* ── Forms ────────────────────────────────────────────────────── */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.3rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #37474f;
+        }
+
+        .form-group input[type="text"],
+        .form-group input[type="password"] {
+            width: 100%;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 0.95rem;
+        }
+
+        .form-group input:focus {
+            outline: none;
+            border-color: #4fc3f7;
+            box-shadow: 0 0 0 2px rgba(79, 195, 247, 0.2);
+        }
+
+        /* ── Tables ───────────────────────────────────────────────────── */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 0.7rem 0.8rem;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        th {
+            font-weight: 600;
+            color: #546e7a;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Debug / Token Info ───────────────────────────────────────── */
+        .debug-section {
+            background: #263238;
+            color: #e0e0e0;
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .debug-section h3 {
+            color: #4fc3f7;
+            margin-bottom: 0.8rem;
+        }
+
+        .debug-section pre {
+            background: #1a1a2e;
+            color: #81c784;
+            padding: 1rem;
+            border-radius: 6px;
+            overflow-x: auto;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .debug-section .comment {
+            color: #78909c;
+            font-style: italic;
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+        }
+
+        /* ── Completed task styling ───────────────────────────────────── */
+        .task-done { text-decoration: line-through; color: #999; }
+    </style>
+</head>
+<body>
+    <!-- ═══════════════════════════════════════════════════════════════════
+         NAVIGATION BAR
+         ═══════════════════════════════════════════════════════════════════
+         The username and role shown here come from the OIDC ID Token.
+         When the user logged in via OAuth, the auth server issued an ID Token
+         containing identity claims. We decoded it and stored the claims in
+         the Flask session.
+    -->
+    <nav>
+        <a href="/" class="brand">
+            Task Manager
+            <span>OAuth 2.0 + PKCE</span>
+        </a>
+
+        {% if session.get('access_token') %}
+        <div class="user-info">
+            <!--
+              'user_info' is extracted from the ID Token (OIDC).
+              The ID Token is a JWT that the auth server includes in the
+              token response when the 'openid' scope is requested.
+            -->
+            <span class="username">{{ session.get('user_info', {}).get('username', 'Unknown') }}</span>
+            <span class="role-badge">{{ session.get('user_info', {}).get('role', 'user') }}</span>
+
+            <form action="/logout" method="POST" style="display: inline;">
+                <button type="submit" class="btn-logout">Logout</button>
+            </form>
+        </div>
+        {% endif %}
+    </nav>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         FLASH MESSAGES
+         ═══════════════════════════════════════════════════════════════════
+         Flask's flash() function is used to display one-time messages to
+         the user (e.g., "Login successful", "Task created", errors, etc.).
+    -->
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flash-messages">
+            {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">{{ message }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

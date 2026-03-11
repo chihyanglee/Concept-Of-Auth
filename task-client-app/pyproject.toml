@@ -1,0 +1,17 @@
+[project]
+name = "task-client-app"
+version = "0.1.0"
+description = "Task Client App - demonstrates OAuth 2.0 authorization code flow with PKCE as a client application"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0.0",
+    "requests>=2.31.0",
+    "pyjwt>=2.8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

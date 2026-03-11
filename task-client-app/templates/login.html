@@ -1,0 +1,87 @@
+<!--
+  login.html — Login Form (OAuth Simulation)
+  ===========================================
+
+  IMPORTANT DISCLAIMER — This is NOT how real OAuth works!
+  --------------------------------------------------------
+  In a standard OAuth 2.0 Authorization Code flow, the CLIENT APP (this app)
+  NEVER handles user credentials. Here's what should happen:
+
+    1. Client app redirects the user's browser to the AUTH SERVER's login page.
+    2. The user enters their username and password ON THE AUTH SERVER'S WEBSITE.
+    3. The auth server authenticates the user and asks for consent.
+    4. The auth server redirects back to the client app with an authorization code.
+
+  The client app NEVER sees the user's password. This is the whole point of
+  OAuth — delegated authorization without sharing credentials.
+
+  WHY WE HAVE THIS FORM:
+  Our auth server is "API-only" — it exposes JSON endpoints but doesn't serve
+  HTML login pages. So we collect credentials here and call the auth server's
+  /auth/login API programmatically.
+
+  IN PRODUCTION, CLIENT APPS MUST NEVER:
+    - Show a login form for the auth server's users
+    - Collect or store user passwords
+    - Have any access to user credentials
+
+  If you're using a real auth server (Keycloak, Auth0, Okta, etc.), this form
+  would not exist — the user would be redirected to the auth server's website.
+-->
+{% extends "base.html" %}
+
+{% block title %}Login{% endblock %}
+
+{% block content %}
+<div style="text-align: center; margin-top: 3rem;">
+    <div class="card" style="max-width: 420px; margin: 0 auto;">
+        <h2>Sign In</h2>
+
+        <!--
+          This warning box reminds developers that this pattern is a demo-only
+          workaround. Real OAuth clients redirect to the auth server's UI.
+        -->
+        <div style="background: #fff3e0; border: 1px solid #ffcc80; border-radius: 6px;
+                    padding: 0.8rem; margin-bottom: 1.2rem; text-align: left; font-size: 0.82rem;">
+            <strong style="color: #e65100;">Demo Note:</strong>
+            <span style="color: #bf360c;">
+                In real OAuth, you'd be redirected to the auth server's login page.
+                We show this form because our auth server is API-only.
+                <strong>Client apps should NEVER handle user credentials.</strong>
+            </span>
+        </div>
+
+        <form method="POST" action="/login">
+            <!--
+              The 'next' hidden field preserves the OAuth state across the login.
+              After the user authenticates, we continue the Authorization Code flow
+              from where we left off (with the PKCE code_verifier and state still
+              stored in the session).
+            -->
+            <input type="hidden" name="next" value="{{ next_url or '' }}">
+
+            <div class="form-group">
+                <label for="username">Username</label>
+                <input type="text" id="username" name="username" required
+                       placeholder="e.g., admin"
+                       autocomplete="username">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required
+                       placeholder="e.g., admin123"
+                       autocomplete="current-password">
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 0.5rem;">
+                Sign In via Auth Server
+            </button>
+        </form>
+
+        <p style="color: #90a4ae; font-size: 0.8rem; margin-top: 1rem;">
+            Default credentials: admin / admin123
+        </p>
+    </div>
+</div>
+{% endblock %}
