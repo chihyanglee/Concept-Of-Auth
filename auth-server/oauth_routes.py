@@ -11,10 +11,10 @@ This module implements Phase 2 of the PRD: Delegated Authorization
 Each endpoint includes detailed comments explaining OAuth 2.0 and OIDC concepts.
 """
 
-from flask import Blueprint, request, jsonify, redirect, url_for, render_template_string
+from flask import Blueprint, request, jsonify, redirect, url_for, render_template_string, current_app
 from urllib.parse import urlencode, parse_qs, urlparse
 from models import User, Client, AuthorizationCode, TokenBlocklist
-from jwt_utils import create_access_token, create_refresh_token, create_id_token, verify_token, revoke_token, get_user_from_token
+from jwt_utils import create_access_token, create_refresh_token, create_id_token, verify_token, revoke_token, get_user_from_token, extract_bearer_token
 from database import db
 import logging
 import secrets
@@ -166,18 +166,13 @@ def authorize():
         granted_scopes = [s for s in requested_scopes if s in allowed_scopes]
         
         # Check if user is authenticated
-        auth_header = request.headers.get('Authorization')
         current_user = None
-        
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]
-                payload = verify_token(token, 'access')
-                if payload:
-                    current_user = User.query.get(int(payload['sub']))
-            except:
-                pass
-        
+        token = extract_bearer_token()
+        if token:
+            payload = verify_token(token, 'access')
+            if payload:
+                current_user = User.query.get(int(payload['sub']))
+
         # If not authenticated, redirect to login
         if not current_user:
             login_url = url_for('auth.login') + '?' + urlencode({
@@ -216,18 +211,13 @@ def authorize():
         code_challenge_method = request.form.get('code_challenge_method', 'S256')
         
         # Get current user (should be authenticated at this point)
-        auth_header = request.headers.get('Authorization')
         current_user = None
-        
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]
-                payload = verify_token(token, 'access')
-                if payload:
-                    current_user = User.query.get(int(payload['sub']))
-            except:
-                pass
-        
+        token = extract_bearer_token()
+        if token:
+            payload = verify_token(token, 'access')
+            if payload:
+                current_user = User.query.get(int(payload['sub']))
+
         if not current_user:
             return jsonify({
                 'error': 'access_denied',
@@ -424,7 +414,7 @@ def handle_authorization_code_exchange(data):
         'access_token': access_token,
         'refresh_token': refresh_token,
         'token_type': 'Bearer',
-        'expires_in': 900,
+        'expires_in': int(current_app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds()),
         'scope': ' '.join(granted_scopes)
     }
     
@@ -489,7 +479,7 @@ def handle_refresh_token_exchange(data):
     return jsonify({
         'access_token': new_access_token,
         'token_type': 'Bearer',
-        'expires_in': 900
+        'expires_in': int(current_app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds())
     }), 200
 
 def handle_client_credentials_flow(data):
@@ -531,7 +521,7 @@ def handle_client_credentials_flow(data):
     return jsonify({
         'access_token': access_token,
         'token_type': 'Bearer',
-        'expires_in': 900,
+        'expires_in': int(current_app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds()),
         'scope': ' '.join(granted_scopes)
     }), 200
 
@@ -559,22 +549,14 @@ def userinfo():
         "role": "user"
     }
     """
-    # Extract access token
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
+    # Extract access token using the shared utility
+    access_token = extract_bearer_token()
+    if not access_token:
         return jsonify({
             'error': 'invalid_request',
-            'error_description': 'Authorization header required'
+            'error_description': 'Authorization header with Bearer token required'
         }), 401
-    
-    try:
-        access_token = auth_header.split(' ')[1]
-    except IndexError:
-        return jsonify({
-            'error': 'invalid_request',
-            'error_description': 'Invalid authorization header format'
-        }), 401
-    
+
     # Verify access token
     payload = verify_token(access_token, 'access')
     if not payload:

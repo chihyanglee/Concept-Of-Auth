@@ -9,10 +9,10 @@ This module implements Phase 1 of the PRD: Core User Authentication
 Each endpoint includes detailed comments explaining the authentication concepts.
 """
 
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from werkzeug.security import check_password_hash
 from models import User, TokenBlocklist, UserSession
-from jwt_utils import create_access_token, create_refresh_token, revoke_token
+from jwt_utils import create_access_token, create_refresh_token, revoke_token, token_required, extract_bearer_token
 from database import db
 import logging
 
@@ -64,7 +64,10 @@ def register():
         
         username = data['username'].strip()
         password = data['password']
-        role = data.get('role', 'user')
+        # New users always get the 'user' role. Only admins can elevate
+        # roles via PUT /admin/users/<id>/role. Allowing callers to set
+        # their own role here would completely bypass RBAC.
+        role = 'user'
         
         # Basic validation
         if len(username) < 3:
@@ -196,7 +199,7 @@ def login():
             'access_token': access_token,
             'refresh_token': refresh_token,
             'token_type': 'Bearer',
-            'expires_in': 900,  # 15 minutes in seconds
+            'expires_in': int(current_app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds()),
             'user': user.to_dict()
         }), 200
         
@@ -236,18 +239,11 @@ def logout():
     }
     """
     try:
-        # Extract access token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
+        # Extract access token using the shared utility
+        access_token = extract_bearer_token()
+        if not access_token:
             return jsonify({
-                'error': 'Authorization header required'
-            }), 401
-        
-        try:
-            access_token = auth_header.split(' ')[1]
-        except IndexError:
-            return jsonify({
-                'error': 'Invalid authorization header format'
+                'error': 'Authorization header with Bearer token required'
             }), 401
         
         # Revoke access token
@@ -367,7 +363,7 @@ def refresh_token():
         response_data = {
             'access_token': new_access_token,
             'token_type': 'Bearer',
-            'expires_in': 900
+            'expires_in': int(current_app.config['JWT_ACCESS_TOKEN_EXPIRES'].total_seconds())
         }
         
         if new_refresh_token:
@@ -384,32 +380,28 @@ def refresh_token():
         }), 500
 
 @auth_bp.route('/me', methods=['GET'])
+@token_required
 def get_current_user():
     """
     Get Current User Information
-    
+
     This endpoint demonstrates how to extract user information from
-    a valid access token. It's protected by the token_required decorator.
-    
+    a valid access token. It's protected by the @token_required decorator,
+    which validates the JWT and populates request.current_user.
+
     Request Headers:
     Authorization: Bearer <access_token>
-    
+
     Returns:
     {
         "user": {
             "id": 1,
-            "username": "testuser", 
+            "username": "testuser",
             "role": "user",
             "scopes": ["read", "write"]
         }
     }
     """
-    from jwt_utils import token_required
-    
-    @token_required
-    def _get_current_user():
-        return jsonify({
-            'user': request.current_user
-        }), 200
-    
-    return _get_current_user()
+    return jsonify({
+        'user': request.current_user
+    }), 200

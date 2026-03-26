@@ -6,7 +6,7 @@ authors = [
     {name = "Simon", email = "simon@example.com"}
 ]
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "flask>=3.0.0",
     "flask-sqlalchemy>=3.1.0",
@@ -35,7 +35,7 @@ packages = ["."]
 
 [tool.black]
 line-length = 88
-target-version = ['py311']
+target-version = ['py314']
 
 [tool.flake8]
 max-line-length = 88

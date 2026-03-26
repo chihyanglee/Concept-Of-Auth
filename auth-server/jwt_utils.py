@@ -35,7 +35,7 @@ def create_access_token(user_id, username, role, scopes=None, client_id=None):
     # Standard JWT claims
     payload = {
         'iss': 'auth-server',  # Issuer
-        'sub': str(user_id),   # Subject (user ID)
+        'sub': str(user_id) if user_id is not None else client_id,  # Subject (user ID or client ID for client_credentials)
         'aud': client_id or 'default',  # Audience
         'exp': now + current_app.config['JWT_ACCESS_TOKEN_EXPIRES'],  # Expiration
         'iat': now,  # Issued at
@@ -154,25 +154,34 @@ def verify_token(token, token_type='access'):
     except jwt.InvalidTokenError:
         return None
 
+def extract_bearer_token():
+    """
+    Extract the Bearer token from the Authorization header.
+
+    Returns the raw token string, or None if the header is missing or
+    malformed. This utility exists so that every route that needs the
+    token doesn't have to reimplement the same split-and-validate logic.
+    """
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return None
+    parts = auth_header.split(' ', 1)
+    if len(parts) != 2 or parts[0].lower() != 'bearer':
+        return None
+    return parts[1]
+
+
 def token_required(f):
     """
     Decorator to require a valid access token
-    
+
     This decorator extracts the access token from the Authorization header,
     verifies it, and passes the user information to the decorated function.
     """
     @wraps(f)
     def decorated(*args, **kwargs):
-        token = None
-        
-        # Extract token from Authorization header
-        auth_header = request.headers.get('Authorization')
-        if auth_header:
-            try:
-                token = auth_header.split(' ')[1]  # Bearer <token>
-            except IndexError:
-                return jsonify({'error': 'Invalid authorization header format'}), 401
-        
+        token = extract_bearer_token()
+
         if not token:
             return jsonify({'error': 'Access token is required'}), 401
         

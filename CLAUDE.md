@@ -6,17 +6,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Educational authentication/authorization server implementing OAuth 2.0, OpenID Connect (OIDC), and Role-Based Access Control (RBAC). Built with Flask + SQLAlchemy, using SQLite for storage.
 
+## Toolchain
+
+- **mise** manages tool versions (Python, uv) — see `mise.toml`
+- **uv** manages Python packages — each service has its own `pyproject.toml` and `uv.lock`
+- **Python 3.14** — pinned in `.python-version` and `mise.toml`
+
 ## Commands
 
 ```bash
-# Install dependencies
+# Set up toolchain (installs Python + uv via mise)
+mise install
+
+# Start all three services (auth server + client app + resource API)
+./start-all.sh
+
+# Or run a single service
+cd auth-server && uv run python app.py        # port 5000
+cd task-client-app && uv run python app.py    # port 5001
+cd task-resource-api && uv run python app.py  # port 5002
+
+# Install dependencies for a service
 cd auth-server && uv sync
-
-# Run development server (port 5000, creates DB + default users on first run)
-cd auth-server && uv run python app.py
-
-# Alternative: use startup script (checks uv, syncs, runs)
-cd auth-server && ./start.sh
 
 # Run tests
 cd auth-server && uv run pytest
@@ -30,7 +41,7 @@ cd auth-server && uv run flake8
 
 ## Code Style
 
-- Formatter: Black (line-length 88, target Python 3.11)
+- Formatter: Black (line-length 88, target Python 3.14)
 - Linter: Flake8 (ignores E203, W503)
 
 ## Architecture

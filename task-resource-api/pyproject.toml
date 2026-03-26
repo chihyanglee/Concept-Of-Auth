@@ -2,7 +2,7 @@
 name = "task-resource-api"
 version = "0.1.0"
 description = "Task Resource API - demonstrates JWT validation and scope enforcement as an OAuth resource server"
-requires-python = ">=3.11"
+requires-python = ">=3.14"
 dependencies = [
     "flask>=3.0.0",
     "flask-sqlalchemy>=3.1.0",
